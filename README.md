@@ -19,7 +19,7 @@ Linux 上 OpenClaw 把活干完了，Windows 右下角立即弹窗提醒你—�
         ▼  OpenClaw 每次 agent 回合结束，写入 audit_events
 Linux: ~/.openclaw/state/openclaw.sqlite
         │
-        ▼  Windows 每 30 秒 SSH 执行一次只读查询
+        ▼  Windows 按各主机设定的间隔（默认 30 秒）SSH 执行只读查询
 Windows: query.py --since <上次游标> → 新事件 + 结果摘要 + 耗时
         │
         ▼
@@ -34,7 +34,7 @@ Windows: query.py --since <上次游标> → 新事件 + 结果摘要 + 耗时
 | Windows | `watcher/main.py` | 主循环：多主机轮询、暂停判断、托盘接入 |
 | Windows | `watcher/tray.py` | 系统托盘：状态、暂停/恢复、打开配置、退出 |
 | Windows | `watcher/setup_wizard.py` | 多主机配置向导（GUI + CLI） |
-| Windows | `watcher/poller.py` | SSH 拉取单台主机事件 |
+| Windows | `watcher/poller.py` | SSH 拉取单台主机事件（每台主机一个轮询线程） |
 | Windows | `watcher/ssh_client.py` | paramiko 连接（带重试，支持绑定源网卡） |
 | Windows | `watcher/state.py` | 每台主机游标、暂停截止时间 |
 | Windows | `watcher/notifier/` | 通知后端接口 + 弹窗实现（卡通小人升级点） |
@@ -50,23 +50,24 @@ Windows: query.py --since <上次游标> → 新事件 + 结果摘要 + 耗时
 | 要弹提醒的 Windows | OpenClaw Watcher 客户端 | 本文的软件包 |
 | 跑 OpenClaw 的 Linux | **什么都不用装** | 安装器自动上传一个约 6KB 的只读查询脚本，无常驻进程 |
 
-一个客户端实例监控一台 Linux 主机。要监控多台 Linux，就在多台 Windows
-各装一份客户端（或同一台电脑放多份目录、各自配置）。
+一个客户端实例可以**同时监控多台 Linux 主机**：在配置向导里「添加」多台即可，
+每台可单独设置轮询间隔、提醒状态和启用开关，互不影响。
 
 ### 方式一：免 Python（推荐，拷贝即用）
 
 1. 解压 `OpenClawWatcher-0.1.0-win64.zip` 到任意目录（如 `C:\Tools\OpenClawWatcher`）；
 2. 双击 `setup.cmd`；
 3. 填 Linux 主机地址、端口、用户名、密码（密码仅首次授权用，之后走密钥）；
-4. 点「安装并启动」：自动生成密钥 → 授权 → 上传查询脚本 → 写配置 → 注册开机自启 → 启动。
+   要多台就在列表里继续「添加」；
+4. 点「保存并启动」：自动生成密钥 → 授权 → 上传查询脚本 → 写配置 → 注册开机自启 → 启动。
 
 卸载：双击 `uninstall.cmd`。
 
 ### 方式二：有 Python 的电脑
 
 ```powershell
-python run.py --setup          # 图形向导
-# 或命令行自动化（适合批量部署）：
+python run.py --setup          # 图形向导（可添加多台主机）
+# 或命令行自动化（每次添加一台，可重复执行）：
 python run.py --setup-cli --host 192.168.1.100 --port 22 --user youruser --password yourpassword --bind 192.168.1.50
 python install.ps1             # 注册开机自启（也可由向导完成）
 ```
