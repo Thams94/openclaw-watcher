@@ -1,0 +1,22 @@
+{
+  "hosts": [
+    {
+      "id": "h-main",
+      "name": "主服务器",
+      "host": "192.168.1.100",
+      "port": 22,
+      "user": "youruser",
+      "key_path": "~/.ssh/id_openclaw2",
+      "bind_address": "",
+      "poll_interval_seconds": 30,
+      "notify_statuses": ["succeeded", "failed", "timed_out"],
+      "ignore_fast_turns_ms": 0,
+      "enabled": true
+    }
+  ],
+  "notifier": "popup",
+  "sound": true,
+  "tray": true,
+  "popup_timeout_seconds": 25,
+  "log_level": "INFO"
+}
