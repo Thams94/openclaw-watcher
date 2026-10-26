@@ -189,3 +189,8 @@ powershell -ExecutionPolicy Bypass -File package.ps1 -Python "C:\...\pythoncore-
 - 软件只读打开 OpenClaw 数据库，不修改任何数据；
 - SSH 使用密钥认证，不存储明文密码；
 - 事件文件与摘要仅在本地内存与日志中短暂存在。
+
+## License
+
+[MIT](LICENSE) © 2026 Thams94
+
