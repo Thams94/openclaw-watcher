@@ -73,13 +73,28 @@ def provision_host(host, password=None, log=print):
     sock.settimeout(12)
     if host.get("bind_address"):
         sock.bind((host["bind_address"], 0))
-    sock.connect((host["host"], int(host["port"])))
+    try:
+        sock.connect((host["host"], int(host["port"])))
+    except OSError as exc:
+        raise SshError(f"端口连接失败：{exc}（检查 IP / 端口 / 安全组）") from exc
     transport = paramiko.Transport(sock)
     transport.start_client(timeout=12)
-    if password:
-        transport.auth_password(host["user"], password, fallback=True)
-    else:
-        transport.auth_publickey(host["user"], _load_key(key_path))
+    try:
+        if password:
+            transport.auth_password(host["user"], password, fallback=True)
+        else:
+            transport.auth_publickey(host["user"], _load_key(key_path))
+    except paramiko.AuthenticationException as exc:
+        allowed = getattr(exc, "allowed_types", None) or []
+        transport.close()
+        if password and allowed and "password" not in allowed:
+            raise SshError(
+                f"服务器不允许密码登录（仅支持：{', '.join(allowed)}）") from exc
+        if password:
+            raise SshError(f"用户名或密码错误（用户：{host['user']}）") from exc
+        raise SshError(
+            f"密钥未授权（用户：{host['user']}）：请填写密码，或先把公钥加入服务器 "
+            "~/.ssh/authorized_keys") from exc
     log(f"[{host['name']}] SSH 认证成功")
 
     try:
@@ -123,22 +138,56 @@ def provision_host(host, password=None, log=print):
 
 
 def test_host(host, password=None):
-    """测试连接与查询脚本，返回远端最大 sequence。"""
-    from .poller import Poller
+    """测试 SSH 认证；若查询脚本已部署，再验证能否读取 OpenClaw 状态库。
+
+    返回人类可读的结果；失败时抛出带提示的 SshError。
+    """
     host = normalize_host(host)
-    poller = Poller(host)
-    if password:
-        # 先用密码验证连通性
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(12)
-        if host.get("bind_address"):
-            sock.bind((host["bind_address"], 0))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(12)
+    if host.get("bind_address"):
+        sock.bind((host["bind_address"], 0))
+    try:
         sock.connect((host["host"], int(host["port"])))
-        transport = paramiko.Transport(sock)
-        transport.start_client(timeout=12)
-        transport.auth_password(host["user"], password, fallback=True)
+    except OSError as exc:
+        raise SshError(f"端口连接失败：{exc}（检查 IP / 端口 / 安全组）") from exc
+
+    transport = paramiko.Transport(sock)
+    transport.start_client(timeout=12)
+    try:
+        if password:
+            transport.auth_password(host["user"], password, fallback=True)
+            mode = "密码"
+        else:
+            transport.auth_publickey(host["user"], _load_key(host["key_path"]))
+            mode = "密钥"
+    except paramiko.AuthenticationException as exc:
         transport.close()
-    return poller.init_cursor()
+        allowed = getattr(exc, "allowed_types", None) or []
+        if password and allowed and "password" not in allowed:
+            raise SshError(
+                f"服务器不允许密码登录（仅支持：{', '.join(allowed)}）") from exc
+        if password:
+            raise SshError(f"用户名或密码错误（用户：{host['user']}）") from exc
+        raise SshError(f"密钥未授权（用户：{host['user']}，可改用密码）") from exc
+
+    try:
+        script = host.get("remote_query_path") or "~/.openclaw-watcher/query.py"
+        rc, out = _run(transport, f"test -f {script} && echo YES || echo NO")
+        if "YES" not in out:
+            return f"SSH 认证成功（{mode}）；查询脚本尚未部署，保存时会自动部署"
+        rc, out = _run(
+            transport,
+            f"{host.get('remote_python', 'python3')} {script} --init",
+            timeout=30,
+        )
+        if rc != 0:
+            raise SshError(
+                f"查询脚本执行失败：{out.strip()[:200]}"
+                "（检查该服务器是否安装了 OpenClaw）")
+        return f"SSH 认证成功（{mode}）；查询脚本正常 {out.strip()}"
+    finally:
+        transport.close()
 
 
 def register_autostart():
@@ -365,9 +414,9 @@ class SetupWizard:
 
         def worker():
             try:
-                seq = test_host(host, self.passwords.get(host["id"]))
+                msg = test_host(host, self.passwords.get(host["id"]))
                 self.root.after(0, lambda: self.status.set(
-                    f"[{host['name']}] 连接成功，当前 sequence={seq}"))
+                    f"[{host['name']}] {msg}"))
             except Exception as exc:
                 self.root.after(0, lambda: self.status.set(
                     f"[{host['name']}] 连接失败：{exc}"))

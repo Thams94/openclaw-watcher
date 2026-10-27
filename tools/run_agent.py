@@ -29,8 +29,9 @@ def main():
     )
     transport = session.connect()
     try:
-        cmd = (f"~/.openclaw/bin/openclaw agent --agent {agent} "
-               f"-m '{message}'")
+        # 兼容两种安装方式：系统 PATH 里的 openclaw，或 ~/.openclaw/bin/openclaw
+        cmd = (f'OC=$(command -v openclaw || echo "$HOME/.openclaw/bin/openclaw"); '
+               f'"$OC" agent --agent {agent} -m \'{message}\'')
         rc, out = session.run(transport, cmd, timeout=180)
         print("rc =", rc)
         print(out[:2000])

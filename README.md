@@ -184,6 +184,13 @@ powershell -ExecutionPolicy Bypass -File package.ps1 -Python "C:\...\pythoncore-
 - **提醒太吵**：调大 `ignore_fast_turns_ms`（例如 60000），或把 `notify_statuses`
   改成只保留 `failed`。
 - **日志**：`%APPDATA%\OpenClawWatcher\watcher.log`；状态：同目录 `state.json`。
+- **连云主机报 `authentication failed`**：这是服务器拒绝了认证，不是网络问题。
+  云主机常见原因：只允许密钥登录、用户名不对（阿里云常见 `root` / `ecs-user` / `ubuntu`）、
+  端口不是 22。用诊断脚本定位：
+  ```powershell
+  python tools\diagnose_ssh.py --host <IP> --port <端口> --user <用户名> --password <密码>
+  ```
+  它会打印服务器允许的认证方式（`publickey` / `password`），一眼看出是密码错还是不收密码。
 
 ## 安全
 

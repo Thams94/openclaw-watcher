@@ -1,4 +1,4 @@
-"""一次性部署：把远端查询脚本上传到 Linux 主机（取配置中第一台启用主机）。
+"""一次性部署：把远端查询脚本上传到所有启用的 Linux 主机。
 
 用法（在 openclaw-watcher 目录下）：
     python tools/setup_remote.py
@@ -19,13 +19,7 @@ REMOTE_SCRIPT = os.path.join(
     "watcher", "remote_query.py")
 
 
-def main():
-    cfg = load_config()
-    hosts = enabled_hosts(cfg)
-    if not hosts:
-        print("没有启用的主机")
-        return 1
-    host = hosts[0]
+def deploy(host):
     session = SshSession(
         host=host["host"], port=host["port"], user=host["user"],
         key_path=host["key_path"], bind_address=host.get("bind_address", ""),
@@ -44,14 +38,27 @@ def main():
         sftp.close()
         session.run(transport, f"chmod 755 {remote_path}")
 
-        rc, out = session.run(
-            transport, f"{host.get('remote_python', 'python3')} {remote_path} --init",
-            timeout=30)
-        print("远端脚本部署完成：", remote_path)
-        print("初始化输出：", out.strip())
+        python = host.get("remote_python", "python3")
+        rc, out = session.run(transport, f"{python} {remote_path} --init", timeout=30)
+        print(f"[{host['name']}] {remote_path} -> {out.strip()}")
     finally:
         transport.close()
-    return 0
+
+
+def main():
+    cfg = load_config()
+    hosts = enabled_hosts(cfg)
+    if not hosts:
+        print("没有启用的主机")
+        return 1
+    failures = 0
+    for host in hosts:
+        try:
+            deploy(host)
+        except Exception as exc:
+            failures += 1
+            print(f"[{host['name']}] 部署失败：{exc}")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
